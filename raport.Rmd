@@ -1,30 +1,88 @@
 ---
-title: "Raport"
-author: "Piotr"
+title: "Wykorzystanie analizy regresji do określenia zależności między ogólną liczbą ludności a danymi pomocniczymi stosowanymi w modelowaniu dazymetrycznym"
+author: "Adrian Kurs, Maciej Wołosz, Piotr Pacuła"
 date: "2024-05-11"
-output: html_document
+output:
+  html_document:
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+library(sf)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+
+out_model_punkty_adresowe = st_read("dane\\out_model_punkty_adresowe.shp")
 ```
 
-## R Markdown
+```{r}
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+maxpop = max(c(out_model_punkty_adresowe$TOT, out_model_punkty_adresowe$EST_POP))
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+p1 <- ggplot(data = out_model_punkty_adresowe) +
+  geom_sf(aes(fill = TOT)) +
+  scale_fill_gradient2(name = "Liczba ludności", low = "white", high = "red", limits = c(0,maxpop)) + 
+  labs(title = "Ryc.1 Mapa oryginalnych wartości liczby ludności") + 
+  theme_bw() + theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank())
 
-```{r cars}
-summary(cars)
+p2 <- ggplot(data = out_model_punkty_adresowe) +
+  geom_sf(aes(fill = EST_POP)) +
+  scale_fill_gradient2(name = "Liczba ludności", low = "white", high = "red", limits = c(0,maxpop)) + 
+  labs(title = "Ryc.2 Mapa estymowanych wartości liczby ludności") + 
+  theme_bw() + theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank())
+
+print(p1)
+print(p2)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+```{r}
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+p3 <- ggplot(data = out_model_punkty_adresowe) +
+  geom_sf(aes(fill = RES)) +
+  scale_fill_gradient2(name = "Błąd estymacji", low = "blue", high = "red", limits = c(min(out_model_punkty_adresowe$RES), max(out_model_punkty_adresowe$RES))) + 
+  labs(title = "Ryc.3 Mapa różnic między wartością obserwowaną liczby ludności a jej estymacją") + 
+  theme_bw() + theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank())
+
+print(p3)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+out_model_punkty_adresowe$RES_reclass = case_when(
+    out_model_punkty_adresowe$RES < 0 ~ "bledy ujemne",
+    out_model_punkty_adresowe$RES == 0 ~ "brak bledu",
+    out_model_punkty_adresowe$RES > 0 ~ "bledy dodatnie",
+  )
+
+p4 <- ggplot(data = out_model_punkty_adresowe) +
+  geom_sf(aes(fill = RES_reclass)) +
+  scale_fill_manual(name = "Typ błędu", 
+                    values = c("bledy dodatnie" = "red", "brak bledu" = "white", "bledy ujemne" = "blue")) +
+  labs(title = "Ryc.4 Mapa zreklasyfikowanych błędów modelu") +
+  theme_bw() + theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank())
+
+print(p4)
+```
+
+```{r}
+
+meanerror = mean(out_model_punkty_adresowe$RES)
+rmse = sqrt(mean((out_model_punkty_adresowe$RES)^2))
+
+print(paste("średni błąd estymacji modelu wynosi", round(meanerror,2), "natomiast pierwiastek średniego błędu kwadratowego wynosi", round(rmse,2)))
+```
+
+### Ocena modelu
