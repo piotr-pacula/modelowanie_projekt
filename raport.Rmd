@@ -16,6 +16,8 @@ library(dplyr)
 out_model_punkty_adresowe = st_read("dane\\out_model_punkty_adresowe.shp")
 ```
 
+# 1. Wykorzystanie analizy regresji do określenia zależności między ogólną liczbą ludności a punktami adresowymi.
+
 ```{r}
 
 maxpop = max(c(out_model_punkty_adresowe$TOT, out_model_punkty_adresowe$EST_POP))
@@ -85,4 +87,11 @@ rmse = sqrt(mean((out_model_punkty_adresowe$RES)^2))
 print(paste("średni błąd estymacji modelu wynosi", round(meanerror,2), "natomiast pierwiastek średniego błędu kwadratowego wynosi", round(rmse,2)))
 ```
 
-### Ocena modelu
+### 1.1. Ocena modelu
+
+Maciejo,<br>
+YOU KNOW WHAT TO DO
+
+
+# 2. Wykorzystanie analizy regresji do określenia zależności między ogólną liczbą ludności a liczbą mieszkań.
+
