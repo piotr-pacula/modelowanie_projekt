@@ -95,3 +95,301 @@ YOU KNOW WHAT TO DO
 
 # 2. Wykorzystanie analizy regresji do określenia zależności między ogólną liczbą ludności a liczbą mieszkań.
 
+```{r, include=FALSE}
+library(sf) #analizy przestrzenna danych wektorowych w R
+library(rgugik) #pobranie danych BDOT10k z GUGiK
+library(ggplot2)
+library(ggResidpanel) #interaktywne wykresy diagnostyczne
+library(ggfortify) # wykresy diagnostyczne w stylizacji ggplot2.
+library(broom)
+library(plotly)
+library(car)
+
+# PRZYGOTOWANIE DANYCH
+zlewnia <- st_read("dane_dasy/zlewnia_gp.shp")
+
+#wczytanie danych z pliku shp
+pop1km_3035 <- st_read("dane_dasy/pop1km_gp3035.shp")
+
+#transformacja układów współrzędnych z układu 3035 -> 2180
+pop1km  <- st_transform(pop1km_3035, 2180)
+pop1km <- pop1km[,c("TOT", "CODE")]
+head(pop1km)
+
+grid100m <- st_read("dane_dasy/grid100m_2180.shp")
+
+grid100m <- grid100m[,1]
+
+
+topodb_download("szczecinecki", outdir = "./dane_dasy") #POBIERANIE DANYCH - WYMAGA DOSTEPU DO INTERNETU
+budynki <- read_sf("./dane_dasy/PL.PZGiK.339.3215/BDOT10k/PL.PZGiK.339.3215__OT_BUBD_A.xml")
+head(budynki)
+
+budynki <- budynki[,c("x_kod", "liczbaKondygnacji")]
+colnames(budynki) <- c("TYP_BUD", "KONDYGNACJE", st_geometry(budynki) <- "geometry")
+
+budynki_mieszkalne <- budynki[budynki$TYP_BUD%in%c("BUBD01", "BUBD02", "BUBD03", "BUBD04"),] 
+
+table(budynki_mieszkalne$TYP_BUD, budynki_mieszkalne$KONDYGNACJE)
+
+budynki_mieszkalne_pop1km <- budynki_mieszkalne[pop1km,]
+
+plot(budynki_mieszkalne_pop1km)
+
+# st_write(budynki_mieszkalne_pop1km, "dane/cz2_budynki_mieszkalne_pop1km.shp", delete_dsn = TRUE)
+
+table(budynki_mieszkalne_pop1km$TYP_BUD, budynki_mieszkalne_pop1km$KONDYGNACJE)
+
+budynki_mieszkalne_pop1km$KATEGORIA[budynki_mieszkalne_pop1km$TYP_BUD%in%c("BUBD01")]<-1
+
+#budynki_mieszkalne_pop1km$KATEGORIA[budynki_mieszkalne_pop1km$TYP_BUD%in%c("BUBD02")]<-2
+budynki_mieszkalne_pop1km$KATEGORIA[budynki_mieszkalne_pop1km$TYP_BUD%in%c("BUBD03", "BUBD04")]<- budynki_mieszkalne_pop1km$KONDYGNACJE[budynki_mieszkalne_pop1km$TYP_BUD%in%c("BUBD03", "BUBD04")]
+
+centroidy_budynki <- st_centroid(budynki_mieszkalne_pop1km)
+
+budynki_w_pop1km <- st_join(centroidy_budynki, pop1km[,c("TOT", "CODE")])
+
+count_budynki <- aggregate(KATEGORIA~CODE, budynki_w_pop1km, sum, na.rm=TRUE)
+colnames(count_budynki) <- c("CODE", "N_BUDYNKI")
+
+pop1km <- merge(pop1km, count_budynki, by = "CODE", all.x = TRUE)
+
+head(pop1km)
+
+pop1km$N_BUDYNKI[is.na(pop1km$N_BUDYNKI)]<- 0
+
+```
+
+### 2.1 Liniowy model zależności między liczbą ludności a liczbą mieszkań w siatce 1km
+
+```{r}
+# wykres rozrzutu
+ggplot(pop1km, aes(x=TOT, y=N_BUDYNKI)) + geom_point() +
+  coord_fixed(ratio = 1) + 
+  xlab("Liczba ludności") + 
+  ylab("Liczba mieszkań") + 
+  geom_smooth() + 
+  geom_abline(color = 'grey') + 
+  theme_bw()
+
+# model liniowy
+model_liniowy <- lm(TOT ~ N_BUDYNKI, data = pop1km)
+plot(model_liniowy)
+```
+
+W jakim stopniu liczba ludności (TOT) jest wyjaśniana przez liczbę mieszkań?
+
+
+### 2.2. Jakie są statystyki reszt? (residuals)
+```{r}
+resid_interact(model_liniowy)
+summary(model_liniowy$residuals)
+mean(model_liniowy$residuals)
+```
+
+# 3. Ocena dopasowania modelu (wykresy diagnostyczne, identyfikacja wartości odstających).
+Wartości odstające można zidentyfikować wykorzystując wykresy diagnostyczne, a w szczególności wykres Residuals vs. Leverage.
+
+```{r}
+autoplot(model_liniowy) + theme_classic()
+```
+
+```{r}
+#dopasowanie modelu
+smr_model_lm <-summary(model_liniowy)
+
+c( R2 = smr_model_lm$r.squared, R2_adj = smr_model_lm$adj.r.squared)
+
+#~70% zmienności zmiennej TOT jest wyjaśniona przez zmienność zmiennej N_BUDYNKI.
+
+# Określenie dowolnego przedziału ufności dla współczynników modelu
+confint(model_liniowy, level = 0.99)
+
+outlierTest(model_liniowy)
+
+ggplot(pop1km, aes(x=TOT, y=N_BUDYNKI)) + 
+  geom_point() +
+  geom_point(data = pop1km[c(21, 25, 34),], aes(x=TOT, y=N_BUDYNKI), color = "red", size = 4) +
+  coord_fixed(ratio = 1) + 
+  xlab("Liczba ludności") + 
+  ylab("Liczba mieszkań") + 
+  geom_smooth() + 
+  geom_abline(color = 'grey') + 
+  theme_bw()
+
+par(mfrow = c(2, 2))
+plot(model_liniowy)
+```
+
+```{r}
+meanerror = mean(model_liniowy$residuals)
+rmse = sqrt(mean((model_liniowy$residuals)^2))
+
+print(paste("średni błąd estymacji modelu wynosi", meanerror, "natomiast pierwiastek średniego błędu kwadratowego wynosi", round(rmse,2)))
+```
+
+PYTANIA
+Czego dowiadujemy się z wykresów diagnostycznych?
+Czy model jest dobrze dopasowany?
+Czy spełnione są założenia regresji liniowej?
+
+
+# 4. Model po usunięciu wartości odstających
+
+### 4.1 Model regresji
+
+```{r}
+# Usunięcie wierszy 21, 25 i 34
+pop1km_n <- pop1km[-c(21, 25, 34), ]
+
+# wykres rozrzutu
+ggplot(pop1km_n, aes(x=TOT, y=N_BUDYNKI)) + geom_point() +
+  coord_fixed(ratio = 1) + 
+  xlab("Liczba ludności") + 
+  ylab("Liczba mieszkań") + 
+  geom_smooth() + 
+  geom_abline(color = 'grey') + 
+  theme_bw()
+
+# model liniowy
+model_liniowy_n <- lm(TOT ~ N_BUDYNKI, data = pop1km_n)
+
+autoplot(model_liniowy_n) + theme_classic()
+```
+
+### 4.2. Ocena modelu
+
+```{r}
+#dopasowanie modelu
+smr_model_lm_n <-summary(model_liniowy_n)
+
+c( R2 = smr_model_lm_n$r.squared, R2_adj = smr_model_lm_n$adj.r.squared)
+
+#~89% zmienności zmiennej TOT jest wyjaśniona przez zmienność zmiennej N_BUDYNKI.
+
+# Określenie dowolnego przedziału ufności dla współczynników modelu
+confint(model_liniowy_n, level = 0.99)
+
+outlierTest(model_liniowy_n)
+
+ggplot(pop1km_n, aes(x=TOT, y=N_BUDYNKI)) + 
+  geom_point() +
+  geom_point(data = pop1km_n[c(65, 33),], aes(x=TOT, y=N_BUDYNKI), color = "red", size = 4) +
+  coord_fixed(ratio = 1) + 
+  xlab("Liczba ludności") + 
+  ylab("Liczba mieszkań") + 
+  geom_smooth() + 
+  geom_abline(color = 'grey') + 
+  theme_bw()
+
+
+#WIZUALIZACJA
+par(mfrow = c(2, 4))
+plot(model_liniowy)
+plot(model_liniowy_n)
+```
+
+```{r}
+meanerror = mean(model_liniowy_n$residuals)
+rmse = sqrt(mean((model_liniowy_n$residuals)^2))
+
+print(paste("średni błąd estymacji modelu wynosi", meanerror, "natomiast pierwiastek średniego błędu kwadratowego wynosi", round(rmse,2)))
+```
+
+
+# 5. Wizualizacja wyników modelu na mapie
+### 5.1. Mapa pokazująca oryginalne wartości liczby ludności (TOT)
+
+```{r}
+ggplot() +
+  geom_sf(data = pop1km, aes(fill = TOT)) +
+  scale_fill_viridis_c() 
+  labs(fill = "Liczba ludności", title = "Mapa liczby ludności") +
+  theme_minimal()
+```
+
+### 5.2. Mapa pokazującą estymowaną liczbę ludności (EST_POP)
+
+```{r}
+# Przewidywanie EST_POP na podstawie modelu liniowego
+pop1km$EST_POP <- predict(model_liniowy, newdata = pop1km)
+
+# Tworzenie mapy z estymowaną liczbą ludności (EST_POP)
+ggplot() +
+  geom_sf(data = pop1km, aes(fill = EST_POP)) +
+  scale_fill_viridis_c() +  # Możesz zmienić paletę kolorów wg potrzeb
+  labs(fill = "Estymowana liczba ludności", title = "Mapa estymowanej liczby ludności") +
+  theme_minimal()
+```
+
+### 5.3. Mapa reszt (różnic między wartością obserwowaną TOT oraz EST_POP)
+
+```{r}
+# Obliczenie reszt
+pop1km$Reszty <- pop1km$TOT - pop1km$EST_POP
+
+# Tworzenie mapy reszt
+ggplot() +
+  geom_sf(data = pop1km, aes(fill = Reszty)) +
+  scale_fill_viridis_c() +  # Możesz zmienić paletę kolorów wg potrzeb
+  labs(fill = "Reszty", title = "Mapa reszt (TOT - EST_POP)") +
+  theme_minimal()
+```
+
+### 5.4. Mapa reszt przeklasyfikowaną do 3 klas (błędy ujemne, brak błędu, błędy dodatnie)
+
+```{r}
+# Przeklasyfikowanie reszt do trzech klas
+pop1km$Klasy_reszt <- cut(pop1km$Reszty, breaks = c(-Inf, 0, Inf), labels = c("Przeszacowane", "Niedoszacowane"))
+
+# Utworzenie etykiety dla braku błędu
+pop1km$Klasy_reszt[is.na(pop1km$Klasy_reszt)] <- "Brak błędu"
+
+# Tworzenie mapy przeklasyfikowanych reszt
+ggplot() +
+  geom_sf(data = pop1km, aes(fill = Klasy_reszt)) +
+  scale_fill_manual(values = c("Przeszacowane" = "red", "Brak błędu" = "grey", "Niedoszacowane" = "blue")) +  # Możesz zmienić kolory wg potrzeb
+  labs(fill = "Klasy reszt", title = "Mapa przeklasyfikowanych reszt") +
+  theme_minimal()
+```
+
+
+# 6. Statystyczna i przestrzenna analiza rokładu błędów modelu regresji na podstawie map oraz wyników modelu
+
+```{r}
+
+```
+
+
+
+# 7. Mapa rozmieszczenia ludności w siatce 100m, dane pomocnicze - liczba mieszkań.
+
+```{r, include=FALSE}
+# Wczytanie danych z pliku SHP
+grid100m <- st_read("dane_dasy/grid100m_2180.shp")
+
+# Przekształcenie CRS dla grid100m
+grid100m <- st_transform(grid100m, crs = st_crs(pop1km))
+
+# Teraz możesz spróbować ponownie połączyć dane
+pop_100m <- st_join(grid100m, pop1km, join = st_intersects)
+
+# Obliczenie liczby mieszkań w każdej komórce siatki 100m
+pop_100m$Liczba_mieszkani <- pop_100m$N_BUDYNKI / nrow(pop_100m)
+```
+
+```{r}
+# Tworzenie interaktywnej mapy rozmieszczenia ludności w siatce 100m
+pop_100m_plot <- ggplot() +
+  geom_sf(data = pop_100m, aes(fill = TOT)) +
+  scale_fill_viridis_c() +  
+  labs(fill = "Liczba ludności", title = "Mapa rozmieszczenia ludności w siatce 100m") +
+  theme_minimal()
+
+# Konwersja ggplot na obiekt plotly
+pop_100m_plotly <- ggplotly(pop_100m_plot)
+
+# Wyświetlenie interaktywnej mapy
+pop_100m_plotly
+```
+
