@@ -90,12 +90,6 @@ rmse = sqrt(mean((out_model_punkty_adresowe$RES)^2))
 print(paste("średni błąd estymacji modelu wynosi", round(meanerror,2), "natomiast pierwiastek średniego błędu kwadratowego wynosi", round(rmse,2)))
 ```
 
-### 1.1. Ocena modelu
-
-Maciejo,<br>
-YOU KNOW WHAT TO DO
-
-
 # 2. Wykorzystanie analizy regresji do określenia zależności między ogólną liczbą ludności a liczbą mieszkań.
 
 ```{r, include=FALSE}
@@ -497,3 +491,4 @@ leaflet(data = pop_100m1, width = "100%", height = "600px") %>%
 ```
 
 # 8. Porównanie wyników obu modeli
+<font size="4">Analiza regresji liniowej określająca zależność między ogólną liczbą ludności a punktami adresowymi daje dużo dokładniejsze wyniki przy uwzględnieniu jedynie punktów adresowych, choć wciąż wyniki są dalekie od ideału. Po uwzględnieniu liczby mieszkań estymacja stała się znacznie mniej dokładna (głównie niedoszacowana), nie pojawiają się również żadne pola pozbawione błędów. Z wykresów dowiadujemy się, że występują wartości odstające, które w znaczny sposób utrudniają odpowiednie dopasowanie modelu do danych, jak i wpływają na wyniki estymacji. Po usunięciu wartości odstających modele są lepiej dopasowane. W resztach są widoczne wzorce, na Q-Q Plot widoczne są odchylenia, reszty wykazują zmienną wariancję, a także obecne są wartości wpływowe. Te czynniki sprawiają, że nawet po usunięciu wartości odstających założenia regresji liniowej nie są spełnione wcale, bądź są spełnione tylko w części.
