@@ -89,6 +89,7 @@ rmse = sqrt(mean((out_model_punkty_adresowe$RES)^2))
 
 print(paste("średni błąd estymacji modelu wynosi", round(meanerror,2), "natomiast pierwiastek średniego błędu kwadratowego wynosi", round(rmse,2)))
 ```
+<font size="4">Na podstawie rycin 1, 2, 3 i 4, można stwierdzić, że jakość modelu jest umiarkowanie dobra jednak podczas gdy średni błąd estymacji wynosi zaledwie 3.67, tak błędy te są rozłożone nierównomiernie w przestrzenni co widać na rycinie 3. Na większośći obszaru błąd waha się w okolicy średniej natomiast występują obszary gdzie błąd jest znacznie większy. Dodatkowo stosunkowo wysoka wartość RMSE - 30.44 także odzwierciedla tą tendencję modelu. Zależność między liczbą ludności a liczbą punktów adresowych może być podstawą do stworzenia bardziej szczegółowej mapy rozmieszczenia ludności jednak trzeba mieć na uwadzę potencjalne błędy.
 
 # 2. Wykorzystanie analizy regresji do określenia zależności między ogólną liczbą ludności a liczbą mieszkań.
 
